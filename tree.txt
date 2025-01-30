@@ -1,0 +1,26 @@
+zxa/
+├── README.md           # Project documentation
+├── go.mod             # Go module definition
+├── go.sum             # Go module checksums
+├── cmd/               # Command-line tools
+│   └── zxa/          # Main assembler CLI tool
+│       └── main.go    # CLI entry point
+├── internal/          # Internal packages
+│   └── zxa_assembler/ # Core assembler package
+│       ├── errors.go      # Error types and handling
+│       ├── instruction.go # Instruction definitions
+│       ├── parser.go      # Assembly parsing
+│       ├── assembler.go   # Main assembler logic
+│       └── output.go      # Output formatting
+├── examples/          # Example Z80 programs
+│   ├── hello/        # Hello world example
+│   │   ├── hello.asm
+│   │   └── README.md
+│   └── game/         # Game example
+│       ├── game.asm
+│       ├── sprites.bin
+│       └── README.md
+└── testdata/         # Test files
+    ├── constants.inc
+    ├── test.asm
+    └── sprite.bin
