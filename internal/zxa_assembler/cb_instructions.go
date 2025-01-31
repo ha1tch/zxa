@@ -1,5 +1,7 @@
 package zxa_assembler
 
+import "fmt"
+
 // initCBInstructions adds all CB-prefixed instructions to the instruction map
 func (m InstructionMap) initCBInstructions() {
 	// Rotation instructions

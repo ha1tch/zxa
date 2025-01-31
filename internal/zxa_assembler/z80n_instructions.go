@@ -11,12 +11,6 @@ func (m InstructionMap) initZ80NInstructions() {
 	m["PUSH nn"] = Instruction{0x8A, 0xED, ImmediateExt, 4, 12, false}
 
 	// Misc Z80N instructions
-	m["LDIX"] = Instruction{0xA4, 0xED, Implied, 2, 16, false}
-	m["LDWS"] = Instruction{0xA5, 0xED, Implied, 2, 14, false}
-	m["LDIRX"] = Instruction{0xB4, 0xED, Implied, 2, 16, false}
-	m["LDDX"] = Instruction{0xAC, 0xED, Implied, 2, 16, false}
-	m["LDDRX"] = Instruction{0xBC, 0xED, Implied, 2, 16, false}
-	m["LDPIRX"] = Instruction{0xB7, 0xED, Implied, 2, 16, false}
 	m["OUTINB"] = Instruction{0x90, 0xED, Implied, 2, 16, false}
 	m["MUL"] = Instruction{0x30, 0xED, Implied, 2, 8, false}
 	m["SWAPNIB"] = Instruction{0x23, 0xED, Implied, 2, 8, false}

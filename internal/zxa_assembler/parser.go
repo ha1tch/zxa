@@ -89,7 +89,7 @@ func (p *Parser) skipComment() {
 }
 
 // readIdentifier reads an identifier token
-func (p *Parser) readIdentifier() Token {
+func (p *Parser) readIdentifier() (Token, error) {
 	start := p.pos
 	startCol := p.column
 
@@ -102,20 +102,20 @@ func (p *Parser) readIdentifier() Token {
 
 	// Check if it's a register
 	if isRegister(value) {
-		return Token{TokenRegister, value, p.line, startCol}
+		return Token{TokenRegister, value, p.line, startCol}, nil
 	}
 
 	// Check if it's an instruction
-	if isInstruction(value) {
-		return Token{TokenInstruction, value, p.line, startCol}
+	if p.isInstruction(value) {
+		return Token{TokenInstruction, value, p.line, startCol}, nil
 	}
 
 	// Check if it's a directive
 	if isDirective(value) {
-		return Token{TokenDirective, value, p.line, startCol}
+		return Token{TokenDirective, value, p.line, startCol}, nil
 	}
 
-	return Token{TokenIdentifier, value, p.line, startCol}
+	return Token{TokenIdentifier, value, p.line, startCol}, nil
 }
 
 // readNumber reads a numeric token
@@ -158,6 +158,22 @@ func (p *Parser) readNumber() (Token, error) {
 	}
 
 	value := p.input[start:p.pos]
+
+	// Validate number format based on prefix
+	if isHex {
+		if _, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(value, "0x"), "$"), 16, 32); err != nil {
+			return Token{}, fmt.Errorf("invalid hex number at line %d: %s", p.line, value)
+		}
+	} else if isBin {
+		if _, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(value, "0b"), "%"), 2, 32); err != nil {
+			return Token{}, fmt.Errorf("invalid binary number at line %d: %s", p.line, value)
+		}
+	} else {
+		if _, err := strconv.Atoi(value); err != nil {
+			return Token{}, fmt.Errorf("invalid number at line %d: %s", p.line, value)
+		}
+	}
+
 	return Token{TokenNumber, value, p.line, startCol}, nil
 }
 
@@ -261,21 +277,37 @@ func (p *Parser) evaluateExpression(expr string) (int, error) {
 	// Handle hex values (both $FFFF and 0xFFFF format)
 	if strings.HasPrefix(expr, "$") {
 		hex := strings.TrimPrefix(expr, "$")
-		return strconv.ParseInt(hex, 16, 32)
+		val, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
 	}
 	if strings.HasPrefix(expr, "0x") {
 		hex := strings.TrimPrefix(expr, "0x")
-		return strconv.ParseInt(hex, 16, 32)
+		val, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
 	}
 
 	// Handle binary values (both %1010 and 0b1010 format)
 	if strings.HasPrefix(expr, "%") {
 		bin := strings.TrimPrefix(expr, "%")
-		return strconv.ParseInt(bin, 2, 32)
+		val, err := strconv.ParseInt(bin, 2, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
 	}
 	if strings.HasPrefix(expr, "0b") {
 		bin := strings.TrimPrefix(expr, "0b")
-		return strconv.ParseInt(bin, 2, 32)
+		val, err := strconv.ParseInt(bin, 2, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
 	}
 
 	// Handle symbols
@@ -298,9 +330,9 @@ func isRegister(s string) bool {
 	return registers[strings.ToUpper(s)]
 }
 
-func isInstruction(s string) bool {
-	// This will need to check against the actual instruction set
-	return false
+func (p *Parser) isInstruction(s string) bool {
+	_, ok := p.assembler.instructions[strings.ToUpper(s)]
+	return ok
 }
 
 func isDirective(s string) bool {
@@ -333,12 +365,17 @@ func (p *Parser) parseLine() error {
 
 		if nextToken.Type == TokenColon {
 			// Process label
-			p.assembler.addSymbol(token.Value, p.assembler.currentAddr)
+			if err := p.assembler.addSymbol(token.Value, p.assembler.currentAddr); err != nil {
+				return err
+			}
 			// Get next token for instruction processing
 			token, err = p.nextToken()
 			if err != nil {
 				return err
 			}
+		} else {
+			// Not a label, put back the token
+			p.tokens = append(p.tokens, nextToken)
 		}
 	}
 
@@ -348,7 +385,9 @@ func (p *Parser) parseLine() error {
 		return p.parseInstruction(token)
 	case TokenDirective:
 		return p.parseDirective(token)
+	case TokenNone:
+		return nil
+	default:
+		return fmt.Errorf("unexpected token at line %d: %s", token.Line, token.Value)
 	}
-
-	return nil
 }
