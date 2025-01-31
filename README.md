@@ -1,16 +1,23 @@
-# ZXA - Z80 Cross Assembler
+# zxa - Z80 cross assembler
 
-A trivial Z80 cross-assembler for the ZX Spectrum written in Go, featuring a clean syntax and modern development workflow features.
+A simple Z80 cross-assembler for the ZX Spectrum written in Go, featuring a clean syntax and modern development workflow features.
 
 ## Features
 
-- [PENDING] Incomplete as of now, aspires to full Z80 instruction set support
-- Modern assembler directives (ORG, INCLUDE, INCBIN, etc.)
+- Aspires to full Z80 instruction set support (possibly incomplete as of Jan 2025)
+- Z80N variant support for the ZX Spectrum Next
+- Assembler directives (ORG, INCLUDE, INCBIN, etc.)
 - Multiple output formats (binary, hex dump, JSON)
 - Detailed error reporting with source locations
 - Support for labels and constants
 - Include file support for modular code
 - Binary file inclusion support
+
+### Missing, may be added:
+- Integration with plus3 (https://github.com/ha1tch/plus3)
+- Integration with zxgotools (https://github.com/ha1tch/zxgotools)
+- Macros
+- Assembler explainer with Ollama
 
 ## Installation
 
