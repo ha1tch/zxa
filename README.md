@@ -48,7 +48,7 @@ zxa example.asm
 
 ## Usage
 
-```bash
+```
 zxa [options] <input.asm>
 
 Options:
