@@ -52,13 +52,13 @@ zxa example.asm
 zxa [options] <input.asm>
 
 Options:
-  -o, --output string    Output file name (default: input base name)
-  -I, --include string   Add include search path
-  --hex                  Generate hex dump output
-  --json                 Generate JSON assembly report
+  --next                Enable ZX Spectrum Next's Z80N processor support 
+  -o, --output string   Output file name (default: input base name)
+  -I, --include string  Add include search path
+  --hex                 Generate hex dump output
+  --json                Generate JSON assembly report
   -v, --verbose         Enable verbose output
   -q                    Quiet mode (suppress non-error output)
-  --next                Enable Z80N (ZX Spectrum Next) instructions
   --version             Show version information
 ```
 
