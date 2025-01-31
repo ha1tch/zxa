@@ -29,10 +29,10 @@ const (
 
 // Token represents a lexical token from the assembly source
 type Token struct {
-	Type    TokenType
-	Value   string
-	Line    int
-	Column  int
+	Type   TokenType
+	Value  string
+	Line   int
+	Column int
 }
 
 // Parser handles the parsing of assembly source code
@@ -99,17 +99,17 @@ func (p *Parser) readIdentifier() Token {
 	}
 
 	value := p.input[start:p.pos]
-	
+
 	// Check if it's a register
 	if isRegister(value) {
 		return Token{TokenRegister, value, p.line, startCol}
 	}
-	
+
 	// Check if it's an instruction
 	if isInstruction(value) {
 		return Token{TokenInstruction, value, p.line, startCol}
 	}
-	
+
 	// Check if it's a directive
 	if isDirective(value) {
 		return Token{TokenDirective, value, p.line, startCol}
@@ -127,7 +127,7 @@ func (p *Parser) readNumber() (Token, error) {
 
 	// Check for hex/binary prefixes
 	if p.pos+1 < len(p.input) {
-		prefix := p.input[p.pos:p.pos+2]
+		prefix := p.input[p.pos : p.pos+2]
 		if prefix == "0x" || prefix == "0X" {
 			isHex = true
 			p.pos += 2
@@ -150,9 +150,9 @@ func (p *Parser) readNumber() (Token, error) {
 	}
 
 	// Read digits
-	for p.pos < len(p.input) && 
-		(unicode.IsDigit(rune(p.input[p.pos])) || 
-		 (isHex && strings.ContainsRune("ABCDEFabcdef", rune(p.input[p.pos])))) {
+	for p.pos < len(p.input) &&
+		(unicode.IsDigit(rune(p.input[p.pos])) ||
+			(isHex && strings.ContainsRune("ABCDEFabcdef", rune(p.input[p.pos])))) {
 		p.pos++
 		p.column++
 	}
@@ -166,7 +166,7 @@ func (p *Parser) readString() (Token, error) {
 	startCol := p.column
 	p.pos++ // Skip opening quote
 	p.column++
-	
+
 	start := p.pos
 	for p.pos < len(p.input) && p.input[p.pos] != '"' {
 		if p.input[p.pos] == '\\' {
@@ -203,7 +203,7 @@ func (p *Parser) nextToken() (Token, error) {
 	case c == ';':
 		p.skipComment()
 		return p.nextToken()
-	
+
 	case c == '\n':
 		p.line++
 		p.column = 1
@@ -250,7 +250,7 @@ func (p *Parser) nextToken() (Token, error) {
 		return Token{TokenMinus, "-", p.line, p.column - 1}, nil
 	}
 
-	return Token{}, fmt.Errorf("unexpected character '%c' at line %d, column %d", 
+	return Token{}, fmt.Errorf("unexpected character '%c' at line %d, column %d",
 		c, p.line, p.column)
 }
 
@@ -350,17 +350,5 @@ func (p *Parser) parseLine() error {
 		return p.parseDirective(token)
 	}
 
-	return nil
-}
-
-// parseInstruction handles parsing of Z80 instructions
-func (p *Parser) parseInstruction(token Token) error {
-	// Implementation would go here
-	return nil
-}
-
-// parseDirective handles parsing of assembler directives
-func (p *Parser) parseDirective(token Token) error {
-	// Implementation would go here
 	return nil
 }
