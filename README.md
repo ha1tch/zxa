@@ -19,7 +19,13 @@ A simple Z80 cross-assembler for the ZX Spectrum written in Go, featuring a clea
 - Macros
 - Assembler explainer with Ollama
 
-## Installation
+### Pre-compiled binaries available
+- Windows 32 and 64-bit
+- Linux 32 and 64-bit
+- Mac M1
+https://github.com/ha1tch/zxa/tree/main/bin
+
+## Building / Go install
 
 ```bash
 go install github.com/ha1tch/zxa/cmd/zxa@latest

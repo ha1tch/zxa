@@ -116,15 +116,8 @@ func main() {
 		opts.Variant = zxa_assembler.Z80Next
 	}
 
-	// Initialize instruction set with options
-	instructions, err := zxa_assembler.NewInstructionSet(opts)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing instruction set: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Create assembler instance
-	asm := zxa_assembler.NewAssembler(instructions)
+	asm := zxa_assembler.NewAssembler(opts)
 
 	// Configure assembler
 	asm.SetHexOutput(cfg.hexOutput)

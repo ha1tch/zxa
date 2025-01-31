@@ -88,6 +88,11 @@ func (p *Parser) skipComment() {
 	}
 }
 
+// isEOF checks if we've reached the end of input
+func (p *Parser) isEOF() bool {
+	return p.pos >= len(p.input)
+}
+
 // readIdentifier reads an identifier token
 func (p *Parser) readIdentifier() (Token, error) {
 	start := p.pos
