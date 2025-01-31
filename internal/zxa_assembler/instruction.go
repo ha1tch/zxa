@@ -1,9 +1,11 @@
 package zxa_assembler
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // AddressingMode represents different Z80 addressing modes
@@ -73,18 +75,18 @@ type BinaryFile struct {
 
 // AssemblyResult represents the result of assembly
 type AssemblyResult struct {
-	Success    bool
-	Binary     []byte
-	HexDump    string
-	JSONReport string
-	Statistics AssemblyStats
+	Success    bool              `json:"success"`
+	Binary     []byte           `json:"-"`
+	HexDump    string           `json:"hexdump,omitempty"`
+	JSONReport string           `json:"report,omitempty"`
+	Statistics AssemblyStats    `json:"statistics"`
 }
 
 // AssemblyStats contains assembly statistics
 type AssemblyStats struct {
-	BytesGenerated int
-	LinesProcessed int
-	SymbolsDefined int
+	BytesGenerated int `json:"bytesGenerated"`
+	LinesProcessed int `json:"linesProcessed"`
+	SymbolsDefined int `json:"symbolsDefined"`
 }
 
 // Assembler represents the assembler state
@@ -197,6 +199,73 @@ func (a *Assembler) resolveForwardRefs() error {
 	return nil
 }
 
+// SetHexOutput configures hex dump output
+func (a *Assembler) SetHexOutput(enabled bool) {
+	a.hexOutput = enabled
+}
+
+// SetJSONOutput configures JSON report output
+func (a *Assembler) SetJSONOutput(enabled bool) {
+	a.jsonOutput = enabled
+}
+
+// generateHexDump creates a hex dump of the output
+func (a *Assembler) generateHexDump() string {
+	var sb strings.Builder
+	const bytesPerLine = 16
+
+	for i := 0; i < len(a.output); i += bytesPerLine {
+		// Write address
+		fmt.Fprintf(&sb, "%04X: ", i)
+
+		// Write hex bytes
+		for j := 0; j < bytesPerLine; j++ {
+			if i+j < len(a.output) {
+				fmt.Fprintf(&sb, "%02X ", a.output[i+j])
+			} else {
+				sb.WriteString("   ")
+			}
+		}
+
+		// Write ASCII representation
+		sb.WriteString(" |")
+		for j := 0; j < bytesPerLine && i+j < len(a.output); j++ {
+			b := a.output[i+j]
+			if b >= 32 && b <= 126 {
+				sb.WriteByte(b)
+			} else {
+				sb.WriteByte('.')
+			}
+		}
+		sb.WriteString("|\n")
+	}
+
+	return sb.String()
+}
+
+// generateJSONReport creates a JSON report of the assembly
+func (a *Assembler) generateJSONReport(stats AssemblyStats) (string, error) {
+	report := struct {
+		Symbols    map[string]Symbol `json:"symbols"`
+		Statistics AssemblyStats     `json:"statistics"`
+	}{
+		Symbols:    a.symbols,
+		Statistics: stats,
+	}
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to generate JSON report: %v", err)
+	}
+
+	return string(data), nil
+}
+
+// AddIncludePath adds a directory to the include search path
+func (a *Assembler) AddIncludePath(path string) {
+	a.includePath = append(a.includePath, path)
+}
+
 // Lookup finds an instruction definition by mnemonic
 func (a *Assembler) Lookup(mnemonic string) (Instruction, bool) {
 	inst, ok := a.instructions[mnemonic]
@@ -280,21 +349,6 @@ func (a *Assembler) processIncludeFile(filename string) error {
 	return nil
 }
 
-// SetHexOutput configures hex dump output
-func (a *Assembler) SetHexOutput(enabled bool) {
-	a.hexOutput = enabled
-}
-
-// SetJSONOutput configures JSON report output
-func (a *Assembler) SetJSONOutput(enabled bool) {
-	a.jsonOutput = enabled
-}
-
-// AddIncludePath adds a directory to the include search path
-func (a *Assembler) AddIncludePath(path string) {
-	a.includePath = append(a.includePath, path)
-}
-
 // Assemble processes the input file and generates output
 func (a *Assembler) Assemble(filename string) (AssemblyResult, error) {
 	content, err := os.ReadFile(filename)
@@ -306,10 +360,12 @@ func (a *Assembler) Assemble(filename string) (AssemblyResult, error) {
 	parser.assembler = a
 
 	// Process each line
+	linesProcessed := 0
 	for !parser.isEOF() {
 		if err := parser.parseLine(); err != nil {
 			return AssemblyResult{}, err
 		}
+		linesProcessed++
 	}
 
 	// Resolve forward references
@@ -317,12 +373,57 @@ func (a *Assembler) Assemble(filename string) (AssemblyResult, error) {
 		return AssemblyResult{}, err
 	}
 
-	return AssemblyResult{
-		Success: true,
-		Binary:  a.output,
-		Statistics: AssemblyStats{
-			BytesGenerated: len(a.output),
-			// Add other stats as needed
-		},
-	}, nil
+	// Generate assembly stats
+	stats := AssemblyStats{
+		BytesGenerated: len(a.output),
+		LinesProcessed: linesProcessed,
+		SymbolsDefined: len(a.symbols),
+	}
+
+	// Create assembly result
+	result := AssemblyResult{
+		Success:    true,
+		Binary:     a.output,
+		Statistics: stats,
+	}
+
+	// Generate hex dump if enabled
+	if a.hexOutput {
+		result.HexDump = a.generateHexDump()
+	}
+
+	// Generate JSON report if enabled
+	if a.jsonOutput {
+		report, err := a.generateJSONReport(stats)
+		if err != nil {
+			return AssemblyResult{}, err
+		}
+		result.JSONReport = report
+	}
+
+	return result, nil
+}
+
+// WriteFiles writes all output files for the assembly result
+func (r *AssemblyResult) WriteFiles(baseFilename string) error {
+	// Always write binary output
+	if err := os.WriteFile(baseFilename+".bin", r.Binary, 0644); err != nil {
+		return fmt.Errorf("failed to write binary file: %v", err)
+	}
+
+	// Write hex dump if present
+	if r.HexDump != "" {
+		if err := os.WriteFile(baseFilename+".hex", []byte(r.HexDump), 0644); err != nil {
+			return fmt.Errorf("failed to write hex dump: %v", err)
+		}
+	}
+
+	// Write JSON report if present
+	if r.JSONReport != "" {
+		if err := os.WriteFile(baseFilename+".json", []byte(r.JSONReport), 0644); err != nil {
+			return fmt.Errorf("failed to write JSON report: %v", err)
+		}
+	}
+
+	return nil
 }

@@ -5,7 +5,7 @@ A simple Z80 cross-assembler for the ZX Spectrum written in Go, featuring a clea
 ## Features
 
 - Aspires to full Z80 instruction set support (possibly incomplete as of Jan 2025)
-- Z80N variant support for the ZX Spectrum Next
+- Z80N variant support for the ZX Spectrum Next, N-Go, and clones.
 - Assembler directives (ORG, INCLUDE, INCBIN, etc.)
 - Multiple output formats (binary, hex dump, JSON)
 - Detailed error reporting with source locations
@@ -22,13 +22,14 @@ A simple Z80 cross-assembler for the ZX Spectrum written in Go, featuring a clea
 ### Pre-compiled binaries available
 - Windows 32 and 64-bit
 - Linux 32 and 64-bit
-- Mac M1
+- Mac 64-bit 
 https://github.com/ha1tch/zxa/tree/main/bin
 
 ## Building / Go install
 
 ```bash
-go install github.com/ha1tch/zxa/cmd/zxa@latest
+$ git clone git@github.com:ha1tch/zxa.git
+$ ./mk.sh
 ```
 
 ## Quick Start
