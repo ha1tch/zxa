@@ -1,7 +1,11 @@
+// file: /cmd/zxa/internal/zxa_assembler/instruction.go
+
 package zxa_assembler
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 )
 
@@ -55,14 +59,19 @@ type ForwardRef struct {
 	Target  string
 }
 
+type Statistics struct {
+	BytesGenerated int `json:"bytesGenerated"`
+	LinesProcessed int `json:"linesProcessed"`
+	SymbolsDefined int `json:"symbolsDefined"`
+}
+
 type AssemblyResult struct {
 	Success    bool
 	Output     []byte
-	Statistics struct {
-		BytesGenerated int
-		LinesProcessed int
-		SymbolsDefined int
-	}
+	HexOutput  bool
+	JSONOutput bool
+	Symbols    map[string]Symbol
+	Statistics Statistics
 }
 
 type Assembler struct {
@@ -207,17 +216,172 @@ func (a *Assembler) processIncludeFile(filename string) error {
 		return fmt.Errorf("circular include detected: %s", filename)
 	}
 	a.includes[absPath] = true
-	return fmt.Errorf("INCLUDE directive not yet implemented")
+
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to read include file: %v", err)
+	}
+
+	parser := NewParser(string(content))
+	parser.assembler = a
+
+	for {
+		err := parser.parseLine()
+		if err != nil {
+			return fmt.Errorf("error parsing include file: %v", err)
+		}
+		if parser.pos >= len(parser.input) {
+			break
+		}
+	}
+
+	return nil
 }
 
 func (a *Assembler) recordBinaryFile(filename string, skip, length int) error {
-	return fmt.Errorf("INCBIN directive not yet implemented")
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("failed to read binary file: %v", err)
+	}
+
+	if skip >= len(content) {
+		return fmt.Errorf("skip offset beyond file size")
+	}
+
+	if length < 0 {
+		length = len(content) - skip
+	}
+
+	if skip+length > len(content) {
+		return fmt.Errorf("requested length exceeds file size")
+	}
+
+	for i := 0; i < length; i++ {
+		a.emitByte(content[skip+i])
+	}
+
+	return nil
 }
 
 func (a *Assembler) Assemble(filename string) (*AssemblyResult, error) {
-	return nil, fmt.Errorf("assembly not yet implemented")
+	result := &AssemblyResult{
+		Success:    true,
+		Output:     nil,
+		HexOutput:  a.hexOutput,
+		JSONOutput: a.jsonOutput,
+		Symbols:    a.symbols,
+	}
+
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input file: %v", err)
+	}
+
+	parser := NewParser(string(content))
+	parser.assembler = a
+
+	// First pass: Parse symbols and resolve forward references
+	for {
+		err := parser.parseLine()
+		if err != nil {
+			return nil, fmt.Errorf("parsing error: %v", err)
+		}
+
+		if parser.pos >= len(parser.input) {
+			break
+		}
+	}
+
+	// Reset for second pass
+	a.output = make([]byte, 0, 1024)
+	a.currentAddr = 0
+	a.originSet = false
+	parser.pos = 0
+	parser.line = 1
+	parser.column = 1
+
+	// Second pass: Generate code
+	for {
+		err := parser.parseLine()
+		if err != nil {
+			return nil, fmt.Errorf("code generation error: %v", err)
+		}
+
+		result.Statistics.LinesProcessed++
+
+		if parser.pos >= len(parser.input) {
+			break
+		}
+	}
+
+	if err := a.resolveForwardRefs(); err != nil {
+		return nil, fmt.Errorf("forward reference resolution error: %v", err)
+	}
+
+	result.Statistics.BytesGenerated = len(a.output)
+	result.Statistics.SymbolsDefined = len(a.symbols)
+	result.Output = a.output
+
+	return result, nil
 }
 
 func (r *AssemblyResult) WriteFiles(basename string) error {
-	return fmt.Errorf("output writing not yet implemented")
+	binFile := basename + ".bin"
+	if err := os.WriteFile(binFile, r.Output, 0644); err != nil {
+		return fmt.Errorf("failed to write binary output: %v", err)
+	}
+
+	if r.HexOutput {
+		hexFile := basename + ".hex"
+		f, err := os.Create(hexFile)
+		if err != nil {
+			return fmt.Errorf("failed to create hex output file: %v", err)
+		}
+		defer f.Close()
+
+		for i := 0; i < len(r.Output); i += 16 {
+			fmt.Fprintf(f, "%04X: ", i)
+			
+			for j := 0; j < 16; j++ {
+				if i+j < len(r.Output) {
+					fmt.Fprintf(f, "%02X ", r.Output[i+j])
+				} else {
+					fmt.Fprintf(f, "   ")
+				}
+			}
+			
+			fmt.Fprintf(f, " |")
+			for j := 0; j < 16 && i+j < len(r.Output); j++ {
+				b := r.Output[i+j]
+				if b >= 32 && b <= 126 {
+					fmt.Fprintf(f, "%c", b)
+				} else {
+					fmt.Fprintf(f, ".")
+				}
+			}
+			fmt.Fprintf(f, "|\n")
+		}
+	}
+
+	if r.JSONOutput {
+		jsonFile := basename + ".json"
+		report := struct {
+			Statistics Statistics         `json:"statistics"`
+			Symbols    map[string]Symbol `json:"symbols"`
+		}{
+			Statistics: r.Statistics,
+			Symbols:    r.Symbols,
+		}
+		
+		jsonData, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to generate JSON report: %v", err)
+		}
+		
+		if err := os.WriteFile(jsonFile, jsonData, 0644); err != nil {
+			return fmt.Errorf("failed to write JSON report: %v", err)
+		}
+	}
+
+	return nil
 }

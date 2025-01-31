@@ -3,7 +3,7 @@
 ;-----------------------------
 
 ; ROM routines
-ROM_CLS         EQU 3503           ; Clear screen
+ROM_CLS        EQU 3503           ; Clear screen
 ROM_PRINT      EQU 8252           ; Print a string
 ROM_OPEN_CHAN  EQU 5633           ; Open a channel
 
