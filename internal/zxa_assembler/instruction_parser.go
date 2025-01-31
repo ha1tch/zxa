@@ -1,7 +1,10 @@
+// file: internal/zxa_assembler/instruction_parser.go
+
 package zxa_assembler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -26,10 +29,7 @@ func (p *Parser) parseInstruction(token Token) error {
 		case TokenRegister:
 			operands = append(operands, tok.Value)
 
-		case TokenNumber:
-			operands = append(operands, tok.Value)
-
-		case TokenIdentifier:
+		case TokenNumber, TokenIdentifier:
 			operands = append(operands, tok.Value)
 
 		case TokenLParen:
@@ -53,23 +53,28 @@ func (p *Parser) parseInstruction(token Token) error {
 		if err != nil {
 			return err
 		}
-		if next.Type != TokenComma && next.Type != TokenNone {
+		if next.Type != TokenComma && next.Type != TokenNone && next.Type != TokenDirective {
 			return fmt.Errorf("expected comma between operands at line %d",
 				next.Line)
 		}
 	}
 
-	// Build the complete instruction
+	// Build instruction format for lookup
 	fullInst := buildInstructionString(mnemonic, operands)
 
-	// Look up the instruction in our instruction set
+	// Look up the instruction
 	inst, exists := p.assembler.instructions[fullInst]
 	if !exists {
-		return fmt.Errorf("unknown instruction at line %d: %s",
-			token.Line, fullInst)
+		// Try generic format for immediate/extended instructions
+		genericInst := buildGenericInstruction(mnemonic, operands)
+		inst, exists = p.assembler.instructions[genericInst]
+		if !exists {
+			return fmt.Errorf("unknown instruction at line %d: %s",
+				token.Line, fullInst)
+		}
 	}
 
-	// Generate binary for the instruction
+	// Generate the instruction code
 	if err := p.generateInstructionCode(inst, operands); err != nil {
 		return err
 	}
@@ -77,10 +82,55 @@ func (p *Parser) parseInstruction(token Token) error {
 	return nil
 }
 
+// buildGenericInstruction creates a generic instruction format for lookup
+func buildGenericInstruction(mnemonic string, operands []string) string {
+	// Replace numeric values with format placeholders
+	genericOps := make([]string, len(operands))
+	for i, op := range operands {
+		if isNumeric(op) {
+			// Use 'n' for 8-bit immediates, 'nn' for 16-bit values
+			if isEightBitValue(op) {
+				genericOps[i] = "n"
+			} else {
+				genericOps[i] = "nn"
+			}
+		} else {
+			genericOps[i] = op
+		}
+	}
+
+	if len(genericOps) == 0 {
+		return mnemonic
+	}
+	return fmt.Sprintf("%s %s", mnemonic, strings.Join(genericOps, ","))
+}
+
+// isNumeric checks if a string represents a numeric value
+func isNumeric(s string) bool {
+	// Remove common prefixes
+	s = strings.TrimPrefix(s, "$")
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimPrefix(s, "%")
+	s = strings.TrimPrefix(s, "0b")
+
+	// Try parsing as different number formats
+	_, err := strconv.ParseInt(s, 0, 32)
+	return err == nil
+}
+
+// isEightBitValue checks if a numeric value fits in 8 bits
+func isEightBitValue(s string) bool {
+	val, err := strconv.ParseInt(s, 0, 32)
+	if err != nil {
+		return false
+	}
+	return val >= -128 && val <= 255
+}
+
 // parseIndirectOperand handles (HL), (IX+d), etc.
 func (p *Parser) parseIndirectOperand() (string, error) {
 	var result strings.Builder
-	
+
 	// Read tokens until closing parenthesis
 	for {
 		tok, err := p.nextToken()
@@ -136,6 +186,9 @@ func (p *Parser) generateInstructionCode(inst Instruction, operands []string) er
 		if err != nil {
 			return err
 		}
+		if val < -128 || val > 255 {
+			return fmt.Errorf("immediate value out of range: %d", val)
+		}
 		p.assembler.emitByte(byte(val))
 
 	case ImmediateExt:
@@ -145,6 +198,9 @@ func (p *Parser) generateInstructionCode(inst Instruction, operands []string) er
 		val, err := p.evaluateExpression(operands[0])
 		if err != nil {
 			return err
+		}
+		if val < -32768 || val > 65535 {
+			return fmt.Errorf("extended immediate value out of range: %d", val)
 		}
 		p.assembler.emitByte(byte(val))
 		p.assembler.emitByte(byte(val >> 8))
@@ -157,13 +213,15 @@ func (p *Parser) generateInstructionCode(inst Instruction, operands []string) er
 		if err != nil {
 			return err
 		}
+		if disp < -128 || disp > 127 {
+			return fmt.Errorf("index displacement out of range: %d", disp)
+		}
 		p.assembler.emitByte(byte(disp))
 
 	case Relative:
 		if len(operands) < 1 {
 			return fmt.Errorf("relative instruction requires target")
 		}
-		// Handle relative jump calculation
 		target, err := p.evaluateExpression(operands[0])
 		if err != nil {
 			return err
@@ -173,6 +231,20 @@ func (p *Parser) generateInstructionCode(inst Instruction, operands []string) er
 			return fmt.Errorf("relative jump out of range")
 		}
 		p.assembler.emitByte(byte(offset))
+
+	case Extended:
+		if len(operands) < 1 {
+			return fmt.Errorf("extended instruction requires address")
+		}
+		val, err := p.evaluateExpression(operands[0])
+		if err != nil {
+			return err
+		}
+		if val < 0 || val > 65535 {
+			return fmt.Errorf("address out of range: %d", val)
+		}
+		p.assembler.emitByte(byte(val))
+		p.assembler.emitByte(byte(val >> 8))
 	}
 
 	return nil

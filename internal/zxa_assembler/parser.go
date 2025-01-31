@@ -1,3 +1,5 @@
+// file: internal/zxa_assembler/parser.go
+
 package zxa_assembler
 
 import (
@@ -154,32 +156,42 @@ func (p *Parser) readNumber() (Token, error) {
 		}
 	}
 
-	// Read digits
-	for p.pos < len(p.input) &&
-		(unicode.IsDigit(rune(p.input[p.pos])) ||
-			(isHex && strings.ContainsRune("ABCDEFabcdef", rune(p.input[p.pos])))) {
+	// Read digits until whitespace or comment
+	for p.pos < len(p.input) {
+		c := rune(p.input[p.pos])
+		if isSpace(c) || c == ';' || c == '\n' {
+			break
+		}
+		if !unicode.IsDigit(c) && (!isHex || !strings.ContainsRune("ABCDEFabcdef", c)) {
+			break
+		}
 		p.pos++
 		p.column++
 	}
 
 	value := p.input[start:p.pos]
 
+	if value == "" || value == "$" || value == "%" {
+		return Token{}, fmt.Errorf("empty number at line %d, column %d", p.line, p.column)
+	}
+
 	// Validate number format based on prefix
 	if isHex {
 		if _, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(value, "0x"), "$"), 16, 32); err != nil {
-			return Token{}, fmt.Errorf("invalid hex number at line %d: %s", p.line, value)
+			return Token{}, fmt.Errorf("invalid hex number at line %d: '%s' (%v)", p.line, value, err)
 		}
+		return Token{TokenNumber, value, p.line, startCol}, nil
 	} else if isBin {
 		if _, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(value, "0b"), "%"), 2, 32); err != nil {
-			return Token{}, fmt.Errorf("invalid binary number at line %d: %s", p.line, value)
+			return Token{}, fmt.Errorf("invalid binary number at line %d: '%s' (%v)", p.line, value, err)
 		}
+		return Token{TokenNumber, value, p.line, startCol}, nil
 	} else {
-		if _, err := strconv.Atoi(value); err != nil {
-			return Token{}, fmt.Errorf("invalid number at line %d: %s", p.line, value)
+		if _, err := strconv.ParseInt(value, 10, 32); err != nil {
+			return Token{}, fmt.Errorf("invalid decimal number at line %d: '%s' (%v)", p.line, value, err)
 		}
+		return Token{TokenNumber, value, p.line, startCol}, nil
 	}
-
-	return Token{TokenNumber, value, p.line, startCol}, nil
 }
 
 // readString reads a string token
@@ -212,6 +224,13 @@ func (p *Parser) readString() (Token, error) {
 
 // nextToken returns the next token from the input
 func (p *Parser) nextToken() (Token, error) {
+	// Return buffered token if any
+	if len(p.tokens) > 0 {
+		token := p.tokens[0]
+		p.tokens = p.tokens[1:]
+		return token, nil
+	}
+
 	p.skipWhitespace()
 
 	if p.pos >= len(p.input) {
@@ -275,6 +294,68 @@ func (p *Parser) nextToken() (Token, error) {
 		c, p.line, p.column)
 }
 
+// parseLine parses a single line of assembly
+func (p *Parser) parseLine() error {
+	token, err := p.nextToken()
+	if err != nil {
+		return err
+	}
+
+	// Empty line or end of file
+	if token.Type == TokenNone {
+		return nil
+	}
+
+	// Handle label definitions
+	if token.Type == TokenIdentifier {
+		nextToken, err := p.nextToken()
+		if err != nil {
+			return err
+		}
+
+		switch nextToken.Type {
+		case TokenColon:
+			// Traditional label with colon
+			if err := p.assembler.addSymbol(token.Value, p.assembler.currentAddr); err != nil {
+				return err
+			}
+			// Get next token for instruction processing
+			token, err = p.nextToken()
+			if err != nil {
+				return err
+			}
+
+		case TokenDirective:
+			// Handle case like "LABEL EQU value"
+			if strings.ToUpper(nextToken.Value) == "EQU" {
+				// Save the label for EQU processing
+				p.assembler.currentLabel = token.Value
+				return p.parseDirective(nextToken)
+			}
+			// Not EQU, treat as normal identifier
+			p.tokens = append(p.tokens, nextToken)
+			token = Token{TokenIdentifier, token.Value, token.Line, token.Column}
+
+		default:
+			// Not a label definition, put back both tokens
+			p.tokens = append(p.tokens, nextToken)
+			token = Token{TokenIdentifier, token.Value, token.Line, token.Column}
+		}
+	}
+
+	// Process instruction or directive
+	switch token.Type {
+	case TokenInstruction:
+		return p.parseInstruction(token)
+	case TokenDirective:
+		return p.parseDirective(token)
+	case TokenNone:
+		return nil
+	default:
+		return fmt.Errorf("unexpected token at line %d: %s", token.Line, token.Value)
+	}
+}
+
 // evaluateExpression evaluates numeric expressions with various prefixes
 func (p *Parser) evaluateExpression(expr string) (int, error) {
 	expr = strings.TrimSpace(expr)
@@ -321,7 +402,11 @@ func (p *Parser) evaluateExpression(expr string) (int, error) {
 	}
 
 	// Default to decimal
-	return strconv.Atoi(expr)
+	val, err := strconv.ParseInt(expr, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int(val), nil
 }
 
 // Helper functions to check token types
@@ -347,52 +432,4 @@ func isDirective(s string) bool {
 		"INCBIN": true,
 	}
 	return directives[strings.ToUpper(s)]
-}
-
-// parseLine parses a single line of assembly
-func (p *Parser) parseLine() error {
-	token, err := p.nextToken()
-	if err != nil {
-		return err
-	}
-
-	// Empty line or end of file
-	if token.Type == TokenNone {
-		return nil
-	}
-
-	// Handle label definitions
-	if token.Type == TokenIdentifier {
-		nextToken, err := p.nextToken()
-		if err != nil {
-			return err
-		}
-
-		if nextToken.Type == TokenColon {
-			// Process label
-			if err := p.assembler.addSymbol(token.Value, p.assembler.currentAddr); err != nil {
-				return err
-			}
-			// Get next token for instruction processing
-			token, err = p.nextToken()
-			if err != nil {
-				return err
-			}
-		} else {
-			// Not a label, put back the token
-			p.tokens = append(p.tokens, nextToken)
-		}
-	}
-
-	// Process instruction or directive
-	switch token.Type {
-	case TokenInstruction:
-		return p.parseInstruction(token)
-	case TokenDirective:
-		return p.parseDirective(token)
-	case TokenNone:
-		return nil
-	default:
-		return fmt.Errorf("unexpected token at line %d: %s", token.Line, token.Value)
-	}
 }

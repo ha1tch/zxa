@@ -1,8 +1,9 @@
+// file: internal/zxa_assembler/directive_parser.go
+
 package zxa_assembler
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -50,8 +51,7 @@ func (p *Parser) parseORG() error {
 	}
 
 	// Set the current address
-	p.assembler.currentAddr = addr
-	p.assembler.originSet = true
+	p.assembler.setOrigin(addr)
 
 	return nil
 }
@@ -74,12 +74,20 @@ func (p *Parser) parseEQU() error {
 		return fmt.Errorf("invalid EQU value at line %d: %v", token.Line, err)
 	}
 
-	// The label should already be in the symbol table from label parsing
-	// Just update its value
-	if p.assembler.currentLabel != "" {
-		p.assembler.updateSymbol(p.assembler.currentLabel, value)
-		p.assembler.currentLabel = "" // Clear current label
+	// Either use the current label or the last seen label
+	if p.assembler.currentLabel == "" {
+		return fmt.Errorf("EQU without label at line %d", token.Line)
 	}
+
+	// Add or update the symbol
+	p.assembler.symbols[p.assembler.currentLabel] = Symbol{
+		Name:  p.assembler.currentLabel,
+		Value: value,
+		Type:  "equ",
+	}
+
+	// Clear the current label
+	p.assembler.currentLabel = ""
 
 	return nil
 }
@@ -225,15 +233,6 @@ func (p *Parser) parseINCLUDE() error {
 
 	filename := token.Value
 
-	// Check for circular includes
-	absPath, err := filepath.Abs(filename)
-	if err != nil {
-		return err
-	}
-	if p.assembler.includes[absPath] {
-		return fmt.Errorf("circular include detected: %s", filename)
-	}
-
 	// Process the included file
 	if err := p.assembler.processIncludeFile(filename); err != nil {
 		return fmt.Errorf("error processing include file %s: %v", filename, err)
@@ -293,7 +292,7 @@ func (p *Parser) parseINCBIN() error {
 		}
 	}
 
-	// Record the binary file inclusion for second pass
+	// Record the binary file for later processing
 	p.assembler.recordBinaryFile(filename, skip, length)
 
 	return nil
