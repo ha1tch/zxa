@@ -162,14 +162,27 @@ func (p *Parser) readNumber() (Token, error) {
 		if isSpace(c) || c == ';' || c == '\n' {
 			break
 		}
-		if !unicode.IsDigit(c) && (!isHex || !strings.ContainsRune("ABCDEFabcdef", c)) {
-			break
+		// For hex numbers, allow 0-9 and A-F
+		if isHex {
+			if !unicode.IsDigit(c) && !strings.ContainsRune("ABCDEFabcdef", c) {
+				break
+			}
+		} else if isBin {
+			if c != '0' && c != '1' {
+				break
+			}
+		} else {
+			if !unicode.IsDigit(c) {
+				break
+			}
 		}
 		p.pos++
 		p.column++
 	}
 
 	value := p.input[start:p.pos]
+	fmt.Printf("Debug: token start=%d pos=%d value='%s' isHex=%v input='%s'\n",
+		start, p.pos, value, isHex, p.input[start:start+10])
 
 	if value == "" || value == "$" || value == "%" {
 		return Token{}, fmt.Errorf("empty number at line %d, column %d", p.line, p.column)

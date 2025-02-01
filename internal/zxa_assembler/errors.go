@@ -9,14 +9,15 @@ import (
 type ErrorCategory int
 
 const (
-	ErrNone ErrorCategory = iota
-	ErrSyntax            // Syntax errors in assembly code
-	ErrSymbol            // Symbol-related errors (undefined, duplicate)
-	ErrValue            // Value errors (out of range, invalid)
-	ErrFile             // File handling errors
-	ErrDirective        // Directive errors
-	ErrRange            // Range errors (jumps too far, etc)
-	ErrInternal         // Internal assembler errors
+	ErrNone      ErrorCategory = iota
+	ErrSyntax                  // Syntax errors in assembly code
+	ErrSymbol                  // Symbol-related errors (undefined, duplicate)
+	ErrValue                   // Value errors (out of range, invalid)
+	ErrFile                    // File handling errors
+	ErrDirective               // Directive errors
+	ErrRange                   // Range errors (jumps too far, etc)
+	ErrInternal                // Internal assembler errors
+	ErrIndexed                 // Indexed addressing errors
 )
 
 // String returns the string representation of an error category
@@ -41,6 +42,15 @@ func (e ErrorCategory) String() string {
 	}
 }
 
+// Common error messages for indexed addressing
+var (
+	ErrInvalidDisplacement  = "invalid displacement value: %s"
+	ErrDisplacementRange    = "displacement out of range (-128 to 127): %d"
+	ErrInvalidBitNumber     = "bit number must be between 0 and 7, got: %d"
+	ErrMissingDisplacement  = "missing displacement for indexed addressing"
+	ErrInvalidIndexRegister = "invalid index register, expected IX or IY"
+)
+
 // AssemblerError represents a detailed error with category and location
 type AssemblerError struct {
 	Category ErrorCategory
@@ -50,16 +60,26 @@ type AssemblerError struct {
 	Column   int // Column where error was detected
 }
 
+// Error creation helper functions for indexed addressing
+func indexedAddressError(file string, line int, msg string, args ...interface{}) AssemblerError {
+	return AssemblerError{
+		Category: ErrIndexed,
+		Message:  fmt.Sprintf(msg, args...),
+		File:     file,
+		Line:     line,
+	}
+}
+
 // Error implements the error interface for AssemblerError
 func (e AssemblerError) Error() string {
 	// Get base filename for cleaner output
 	filename := filepath.Base(e.File)
-	
+
 	if e.Column > 0 {
-		return fmt.Sprintf("%s:%d:%d: %s: %s", 
+		return fmt.Sprintf("%s:%d:%d: %s: %s",
 			filename, e.Line, e.Column, e.Category, e.Message)
 	}
-	return fmt.Sprintf("%s:%d: %s: %s", 
+	return fmt.Sprintf("%s:%d: %s: %s",
 		filename, e.Line, e.Category, e.Message)
 }
 
@@ -88,12 +108,12 @@ func (l *ErrorList) Error() string {
 	if len(l.errors) == 0 {
 		return "no errors"
 	}
-	
+
 	if len(l.errors) == 1 {
 		return l.errors[0].Error()
 	}
-	
-	return fmt.Sprintf("%s (and %d more errors)", 
+
+	return fmt.Sprintf("%s (and %d more errors)",
 		l.errors[0].Error(), len(l.errors)-1)
 }
 

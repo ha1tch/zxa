@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -12,16 +13,16 @@ import (
 type AddressingMode int
 
 const (
-	Implied AddressingMode = iota  // No operand
-	Register               // Single register
-	RegisterPair          // Register pair
-	Immediate             // 8-bit immediate
-	ImmediateExt         // 16-bit immediate
-	Extended             // Extended addressing
-	Indexed              // Indexed addressing (IX+d, IY+d)
-	Relative             // Relative addressing (for jr, djnz)
-	RegisterIndirect     // Register indirect (HL)
-	BitIndex             // Bit operations
+	Implied          AddressingMode = iota // No operand
+	Register                               // Single register
+	RegisterPair                           // Register pair
+	Immediate                              // 8-bit immediate
+	ImmediateExt                           // 16-bit immediate
+	Extended                               // Extended addressing
+	Indexed                                // Indexed addressing (IX+d, IY+d)
+	Relative                               // Relative addressing (for jr, djnz)
+	RegisterIndirect                       // Register indirect (HL)
+	BitIndex                               // Bit operations
 )
 
 // CPUVariant represents different Z80 CPU variants
@@ -41,12 +42,12 @@ type Symbol struct {
 
 // Instruction represents a Z80 instruction definition
 type Instruction struct {
-	Opcode      byte            // Base opcode
-	Prefix      byte            // Instruction prefix (0 = none, 0xCB, 0xDD, 0xED, 0xFD)
-	Mode        AddressingMode  // Addressing mode
-	Length      int            // Instruction length in bytes
-	Cycles      int            // Base cycle count
-	Condition   bool           // True if instruction can be conditional
+	Opcode    byte           // Base opcode
+	Prefix    byte           // Instruction prefix (0 = none, 0xCB, 0xDD, 0xED, 0xFD)
+	Mode      AddressingMode // Addressing mode
+	Length    int            // Instruction length in bytes
+	Cycles    int            // Base cycle count
+	Condition bool           // True if instruction can be conditional
 }
 
 // InstructionMap holds all Z80 instructions indexed by mnemonic
@@ -59,27 +60,27 @@ type AssemblerOptions struct {
 
 // ForwardRef represents a forward reference to be resolved
 type ForwardRef struct {
-	Address    int             // Where to patch
-	Type      AddressingMode  // How to patch (relative vs absolute)
-	Length     int            // How many bytes to patch
-	Target     string         // Target symbol name
+	Address int            // Where to patch
+	Type    AddressingMode // How to patch (relative vs absolute)
+	Length  int            // How many bytes to patch
+	Target  string         // Target symbol name
 }
 
 // BinaryFile represents a binary file to be included
 type BinaryFile struct {
 	Filename string
-	Offset   int    // Where to include in output
-	Skip     int    // Bytes to skip from start of file
-	Length   int    // Bytes to include (-1 for all)
+	Offset   int // Where to include in output
+	Skip     int // Bytes to skip from start of file
+	Length   int // Bytes to include (-1 for all)
 }
 
 // AssemblyResult represents the result of assembly
 type AssemblyResult struct {
-	Success    bool              `json:"success"`
-	Binary     []byte           `json:"-"`
-	HexDump    string           `json:"hexdump,omitempty"`
-	JSONReport string           `json:"report,omitempty"`
-	Statistics AssemblyStats    `json:"statistics"`
+	Success    bool          `json:"success"`
+	Binary     []byte        `json:"-"`
+	HexDump    string        `json:"hexdump,omitempty"`
+	JSONReport string        `json:"report,omitempty"`
+	Statistics AssemblyStats `json:"statistics"`
 }
 
 // AssemblyStats contains assembly statistics
@@ -91,19 +92,19 @@ type AssemblyStats struct {
 
 // Assembler represents the assembler state
 type Assembler struct {
-	instructions  InstructionMap
-	output        []byte
-	currentAddr   int
-	currentLabel  string
-	symbols       map[string]Symbol
-	forwardRefs   []ForwardRef
-	originSet     bool
-	includes      map[string]bool
-	includePath   []string
-	options       AssemblerOptions
-	binaryFiles   []BinaryFile
-	hexOutput     bool
-	jsonOutput    bool
+	instructions InstructionMap
+	output       []byte
+	currentAddr  int
+	currentLabel string
+	symbols      map[string]Symbol
+	forwardRefs  []ForwardRef
+	originSet    bool
+	includes     map[string]bool
+	includePath  []string
+	options      AssemblerOptions
+	binaryFiles  []BinaryFile
+	hexOutput    bool
+	jsonOutput   bool
 }
 
 // NewAssembler creates a new assembler instance
@@ -165,9 +166,9 @@ func (a *Assembler) updateSymbol(name string, value int) error {
 func (a *Assembler) addForwardRef(target string, addr int, mode AddressingMode, length int) {
 	a.forwardRefs = append(a.forwardRefs, ForwardRef{
 		Address: addr,
-		Type:   mode,
-		Length: length,
-		Target: target,
+		Type:    mode,
+		Length:  length,
+		Target:  target,
 	})
 }
 
@@ -197,6 +198,27 @@ func (a *Assembler) resolveForwardRefs() error {
 		}
 	}
 	return nil
+}
+
+// parseDisplacement extracts and validates the displacement value
+func (a *Assembler) parseDisplacement(operands []string) (int64, error) {
+	for _, op := range operands {
+		if strings.Contains(op, "IX") || strings.Contains(op, "IY") {
+			start := strings.IndexAny(op, "+-")
+			end := strings.IndexByte(op, ')')
+			if start != -1 && end != -1 {
+				disp, err := strconv.ParseInt(op[start:end], 10, 8)
+				if err != nil {
+					return 0, fmt.Errorf("invalid displacement: %v", err)
+				}
+				if disp < -128 || disp > 127 {
+					return 0, fmt.Errorf("displacement out of range (-128 to 127): %d", disp)
+				}
+				return disp, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("no valid displacement found")
 }
 
 // SetHexOutput configures hex dump output
