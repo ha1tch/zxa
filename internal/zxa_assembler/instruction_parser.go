@@ -168,12 +168,32 @@ func buildInstructionString(mnemonic string, operands []string) string {
 
 // generateInstructionCode outputs the binary for an instruction
 func (p *Parser) generateInstructionCode(inst Instruction, operands []string) error {
-	// Output prefix byte if any
+	// Special handling for indexed bit instructions (DDCB/FDCB prefixed)
+	if inst.Mode == IndexedBit {
+		// First byte: DD or FD prefix
+		p.assembler.emitByte(inst.Prefix)
+		
+		// Second byte: CB prefix
+		p.assembler.emitByte(0xCB)
+		
+		// Third byte: displacement
+		disp, err := p.extractDisplacement(operands[1]) // operands[1] contains (IX+d) or (IY+d)
+		if err != nil {
+			return err
+		}
+		p.assembler.emitByte(byte(disp))
+		
+		// Fourth byte: bit operation
+		p.assembler.emitByte(inst.Opcode)
+		
+		return nil
+	}
+
+	// Regular instruction processing
 	if inst.Prefix != 0 {
 		p.assembler.emitByte(inst.Prefix)
 	}
 
-	// Output main opcode
 	p.assembler.emitByte(inst.Opcode)
 
 	// Handle operands based on addressing mode
@@ -209,12 +229,9 @@ func (p *Parser) generateInstructionCode(inst Instruction, operands []string) er
 		if len(operands) < 1 {
 			return fmt.Errorf("indexed addressing requires displacement")
 		}
-		disp, err := p.evaluateExpression(operands[0])
+		disp, err := p.extractDisplacement(operands[0])
 		if err != nil {
 			return err
-		}
-		if disp < -128 || disp > 127 {
-			return fmt.Errorf("index displacement out of range: %d", disp)
 		}
 		p.assembler.emitByte(byte(disp))
 
@@ -248,4 +265,30 @@ func (p *Parser) generateInstructionCode(inst Instruction, operands []string) er
 	}
 
 	return nil
+}
+
+// extractDisplacement extracts the displacement value from (IX+d) or (IY+d) format
+func (p *Parser) extractDisplacement(op string) (int64, error) {
+	// Remove parentheses
+	op = strings.TrimPrefix(op, "(")
+	op = strings.TrimSuffix(op, ")")
+	
+	// Find the sign position
+	signPos := strings.IndexAny(op, "+-")
+	if signPos == -1 {
+		return 0, fmt.Errorf("missing displacement in indexed addressing")
+	}
+	
+	// Extract the displacement value
+	dispStr := op[signPos:]
+	disp, err := strconv.ParseInt(dispStr, 10, 8)
+	if err != nil {
+		return 0, fmt.Errorf("invalid displacement value: %v", err)
+	}
+	
+	if disp < -128 || disp > 127 {
+		return 0, fmt.Errorf("displacement out of range (-128 to 127): %d", disp)
+	}
+	
+	return disp, nil
 }

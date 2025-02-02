@@ -1,4 +1,8 @@
+// file: internal/zxa_assembler/index_instructions.go
+
 package zxa_assembler
+
+import "fmt"
 
 // initIndexInstructions adds all DD/FD-prefixed (IX/IY) instructions to the instruction map
 func (m InstructionMap) initIndexInstructions() {
@@ -92,4 +96,19 @@ func (m InstructionMap) initIndexInstructions() {
 	m["DEC (IX+d)"] = Instruction{0x35, 0xDD, Indexed, 3, 23, false}
 	m["INC (IY+d)"] = Instruction{0x34, 0xFD, Indexed, 3, 23, false}
 	m["DEC (IY+d)"] = Instruction{0x35, 0xFD, Indexed, 3, 23, false}
+
+	// Bit operations with indexed addressing (DDCB/FDCB prefixed)
+	for bit := 0; bit < 8; bit++ {
+		// BIT instructions
+		m[fmt.Sprintf("BIT %d,(IX+d)", bit)] = Instruction{byte(0x46 + (bit << 3)), 0xDD, IndexedBit, 4, 20, false}
+		m[fmt.Sprintf("BIT %d,(IY+d)", bit)] = Instruction{byte(0x46 + (bit << 3)), 0xFD, IndexedBit, 4, 20, false}
+		
+		// SET instructions
+		m[fmt.Sprintf("SET %d,(IX+d)", bit)] = Instruction{byte(0xC6 + (bit << 3)), 0xDD, IndexedBit, 4, 23, false}
+		m[fmt.Sprintf("SET %d,(IY+d)", bit)] = Instruction{byte(0xC6 + (bit << 3)), 0xFD, IndexedBit, 4, 23, false}
+		
+		// RES instructions
+		m[fmt.Sprintf("RES %d,(IX+d)", bit)] = Instruction{byte(0x86 + (bit << 3)), 0xDD, IndexedBit, 4, 23, false}
+		m[fmt.Sprintf("RES %d,(IY+d)", bit)] = Instruction{byte(0x86 + (bit << 3)), 0xFD, IndexedBit, 4, 23, false}
+	}
 }

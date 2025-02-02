@@ -122,6 +122,15 @@ func (p *Parser) readIdentifier() (Token, error) {
 		return Token{TokenDirective, value, p.line, startCol}, nil
 	}
 
+	// Check for hex suffix
+	if len(value) > 1 && (strings.HasSuffix(value, "h") || strings.HasSuffix(value, "H")) {
+		// Validate hex number
+		numPart := value[:len(value)-1]
+		if _, err := strconv.ParseInt(numPart, 16, 32); err == nil {
+			return Token{TokenNumber, value, p.line, startCol}, nil
+		}
+	}
+
 	return Token{TokenIdentifier, value, p.line, startCol}, nil
 }
 
@@ -129,22 +138,10 @@ func (p *Parser) readIdentifier() (Token, error) {
 func (p *Parser) readNumber() (Token, error) {
 	start := p.pos
 	startCol := p.column
-	isHex := false
-	isBin := false
 
-	// Check for hex/binary prefixes
-	if p.pos+1 < len(p.input) {
-		prefix := p.input[p.pos : p.pos+2]
-		if prefix == "0x" || prefix == "0X" {
-			isHex = true
-			p.pos += 2
-			p.column += 2
-		} else if prefix == "0b" || prefix == "0B" {
-			isBin = true
-			p.pos += 2
-			p.column += 2
-		}
-	} else if p.pos < len(p.input) {
+	// Handle hex and binary prefixes
+	var isHex, isBin bool
+	if p.pos < len(p.input) {
 		if p.input[p.pos] == '$' {
 			isHex = true
 			p.pos++
@@ -153,18 +150,29 @@ func (p *Parser) readNumber() (Token, error) {
 			isBin = true
 			p.pos++
 			p.column++
+		} else if p.pos+1 < len(p.input) {
+			if p.input[p.pos:p.pos+2] == "0x" {
+				isHex = true
+				p.pos += 2
+				p.column += 2
+			} else if p.input[p.pos:p.pos+2] == "0b" {
+				isBin = true
+				p.pos += 2
+				p.column += 2
+			}
 		}
 	}
 
-	// Read digits until whitespace or comment
+	// Read the number part
 	for p.pos < len(p.input) {
 		c := rune(p.input[p.pos])
-		if isSpace(c) || c == ';' || c == '\n' {
+		if isSpace(c) || c == ',' || c == ')' || c == ';' || c == '\n' {
 			break
 		}
-		// For hex numbers, allow 0-9 and A-F
+
+		// Handle hex digits
 		if isHex {
-			if !unicode.IsDigit(c) && !strings.ContainsRune("ABCDEFabcdef", c) {
+			if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) {
 				break
 			}
 		} else if isBin {
@@ -176,35 +184,17 @@ func (p *Parser) readNumber() (Token, error) {
 				break
 			}
 		}
+
 		p.pos++
 		p.column++
 	}
 
-	value := p.input[start:p.pos]
-	fmt.Printf("Debug: token start=%d pos=%d value='%s' isHex=%v input='%s'\n",
-		start, p.pos, value, isHex, p.input[start:start+10])
-
-	if value == "" || value == "$" || value == "%" {
+	if p.pos <= start {
 		return Token{}, fmt.Errorf("empty number at line %d, column %d", p.line, p.column)
 	}
 
-	// Validate number format based on prefix
-	if isHex {
-		if _, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(value, "0x"), "$"), 16, 32); err != nil {
-			return Token{}, fmt.Errorf("invalid hex number at line %d: '%s' (%v)", p.line, value, err)
-		}
-		return Token{TokenNumber, value, p.line, startCol}, nil
-	} else if isBin {
-		if _, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimPrefix(value, "0b"), "%"), 2, 32); err != nil {
-			return Token{}, fmt.Errorf("invalid binary number at line %d: '%s' (%v)", p.line, value, err)
-		}
-		return Token{TokenNumber, value, p.line, startCol}, nil
-	} else {
-		if _, err := strconv.ParseInt(value, 10, 32); err != nil {
-			return Token{}, fmt.Errorf("invalid decimal number at line %d: '%s' (%v)", p.line, value, err)
-		}
-		return Token{TokenNumber, value, p.line, startCol}, nil
-	}
+	value := p.input[start:p.pos]
+	return Token{TokenNumber, value, p.line, startCol}, nil
 }
 
 // readString reads a string token
@@ -384,6 +374,16 @@ func (p *Parser) evaluateExpression(expr string) (int, error) {
 	}
 	if strings.HasPrefix(expr, "0x") {
 		hex := strings.TrimPrefix(expr, "0x")
+		val, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	}
+
+	// Handle hex values with h suffix
+	if strings.HasSuffix(expr, "h") || strings.HasSuffix(expr, "H") {
+		hex := strings.TrimSuffix(strings.TrimSuffix(expr, "h"), "H")
 		val, err := strconv.ParseInt(hex, 16, 32)
 		if err != nil {
 			return 0, err

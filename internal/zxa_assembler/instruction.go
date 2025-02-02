@@ -20,6 +20,7 @@ const (
 	ImmediateExt                           // 16-bit immediate
 	Extended                               // Extended addressing
 	Indexed                                // Indexed addressing (IX+d, IY+d)
+	IndexedBit                             // Bit operations with indexed addressing
 	Relative                               // Relative addressing (for jr, djnz)
 	RegisterIndirect                       // Register indirect (HL)
 	BitIndex                               // Bit operations
