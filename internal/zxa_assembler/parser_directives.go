@@ -1,4 +1,4 @@
-// file: internal/zxa_assembler/directive_parser.go
+// file: internal/zxa_assembler/parser_directives.go
 
 package zxa_assembler
 

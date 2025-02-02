@@ -1,4 +1,4 @@
-// file: internal/zxa_assembler/number_parser.go
+// file: internal/zxa_assembler/parser_numbers.go
 
 package zxa_assembler
 
@@ -114,15 +114,6 @@ func formatNumber(val int64, format int) string {
 	}
 }
 
-// isValidHexDigit checks if a byte is a valid hexadecimal digit
-func isValidHexDigit(c byte) bool {
-	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')
-}
-
-// isValidBinaryDigit checks if a byte is a valid binary digit
-func isValidBinaryDigit(c byte) bool {
-	return c == '0' || c == '1'
-}
 
 // validateNumberString validates a number string based on its format
 func validateNumberString(s string) error {
@@ -184,4 +175,153 @@ func validateNumberString(s string) error {
 	}
 
 	return nil
+}
+
+// isValidHexDigit checks if a byte is a valid hexadecimal digit
+func isValidHexDigit(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')
+}
+
+// isValidBinaryDigit checks if a byte is a valid binary digit
+func isValidBinaryDigit(c byte) bool {
+	return c == '0' || c == '1'
+}
+
+
+
+
+// readNumber reads a numeric token
+func (p *Parser) readNumber() (Token, error) {
+	start := p.pos
+	startCol := p.column
+
+	// Handle hex and binary prefixes
+	var isHex, isBin bool
+	if p.pos < len(p.input) {
+		if p.input[p.pos] == '$' {
+			isHex = true
+			p.pos++
+			p.column++
+		} else if p.input[p.pos] == '%' {
+			isBin = true
+			p.pos++
+			p.column++
+		} else if p.pos+1 < len(p.input) {
+			if p.input[p.pos:p.pos+2] == "0x" {
+				isHex = true
+				p.pos += 2
+				p.column += 2
+			} else if p.input[p.pos:p.pos+2] == "0b" {
+				isBin = true
+				p.pos += 2
+				p.column += 2
+			}
+		}
+	}
+
+	numberStart := p.pos
+	// Read the number part
+	for p.pos < len(p.input) {
+		c := rune(p.input[p.pos])
+		if isSpace(c) || c == ',' || c == ')' || c == ';' || c == '\n' {
+			break
+		}
+
+		// Handle hex digits
+		if isHex {
+			if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')) {
+				break
+			}
+		} else if isBin {
+			if c != '0' && c != '1' {
+				break
+			}
+		} else {
+			if !isDigit(c) {
+				break
+			}
+		}
+
+		p.pos++
+		p.column++
+	}
+
+	if p.pos <= numberStart {
+		return Token{}, fmt.Errorf("empty number at line %d, column %d", p.line, p.column)
+	}
+
+	value := p.input[start:p.pos]
+	if p.debug {
+		fmt.Printf("DEBUG: readNumber: value='%s' isHex=%v isBin=%v\n", value, isHex, isBin)
+	}
+
+	return Token{TokenNumber, value, p.line, startCol}, nil
+}
+
+
+// evaluateExpression evaluates numeric expressions with various prefixes
+func (p *Parser) evaluateExpression(expr string) (int, error) {
+	expr = strings.TrimSpace(expr)
+
+	if p.debug {
+		fmt.Printf("DEBUG: evaluateExpression: expr='%s'\n", expr)
+	}
+
+	// Handle hex values (both $FFFF and 0xFFFF format)
+	if strings.HasPrefix(expr, "$") {
+		hex := strings.TrimPrefix(expr, "$")
+		val, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	}
+	if strings.HasPrefix(expr, "0x") {
+		hex := strings.TrimPrefix(expr, "0x")
+		val, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	}
+
+	// Handle hex values with h suffix
+	if strings.HasSuffix(expr, "h") || strings.HasSuffix(expr, "H") {
+		hex := strings.TrimSuffix(strings.TrimSuffix(expr, "h"), "H")
+		val, err := strconv.ParseInt(hex, 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	}
+
+	// Handle binary values (both %1010 and 0b1010 format)
+	if strings.HasPrefix(expr, "%") {
+		bin := strings.TrimPrefix(expr, "%")
+		val, err := strconv.ParseInt(bin, 2, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	}
+	if strings.HasPrefix(expr, "0b") {
+		bin := strings.TrimPrefix(expr, "0b")
+		val, err := strconv.ParseInt(bin, 2, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	}
+
+	// Handle symbols
+	if sym, exists := p.assembler.symbols[expr]; exists {
+		return sym.Value, nil
+	}
+
+	// Default to decimal
+	val, err := strconv.ParseInt(expr, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int(val), nil
 }

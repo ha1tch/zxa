@@ -1,3 +1,5 @@
+// file: cmd/zxa/main.go
+
 package main
 
 import (
@@ -22,6 +24,7 @@ type Config struct {
 	verbose      bool
 	z80next      bool
 	quiet        bool
+	debug        bool
 }
 
 func printUsage() {
@@ -45,6 +48,7 @@ func parseFlags() (*Config, error) {
 	flag.BoolVar(&cfg.verbose, "v", false, "enable verbose output")
 	flag.BoolVar(&cfg.z80next, "next", false, "enable Z80N (ZX Spectrum Next) instructions")
 	flag.BoolVar(&cfg.quiet, "q", false, "quiet mode (suppress non-error output)")
+	flag.BoolVar(&cfg.debug, "debug", false, "enable debug output")
 	showVersion := flag.Bool("version", false, "show version information")
 
 	// Custom usage message
@@ -111,6 +115,7 @@ func main() {
 	// Create assembler options
 	opts := zxa_assembler.AssemblerOptions{
 		Variant: zxa_assembler.Z80Standard,
+		Debug:   cfg.debug,
 	}
 	if cfg.z80next {
 		opts.Variant = zxa_assembler.Z80Next
@@ -128,9 +133,10 @@ func main() {
 
 	// Print configuration if verbose
 	if cfg.verbose {
-		fmt.Printf("ZXA version %s\n", version)
-		fmt.Printf("Input file: %s\n", cfg.inputFile)
+		fmt.Printf("ZXA version: %s\n", version)
+		fmt.Printf(" Input file: %s\n", cfg.inputFile)
 		fmt.Printf("Output base: %s\n", cfg.outputFile)
+
 		if len(cfg.includePaths) > 0 {
 			fmt.Printf("Include paths:\n")
 			for _, path := range cfg.includePaths {
@@ -173,8 +179,8 @@ func main() {
 			fmt.Printf("  Symbols defined: %d\n", result.Statistics.SymbolsDefined)
 			fmt.Printf("  Time taken: %v\n", time.Since(startTime))
 		} else {
-			fmt.Printf("Assembled %s: %d bytes\n", 
-				filepath.Base(cfg.inputFile), 
+			fmt.Printf("Assembled %s: %d bytes\n",
+				filepath.Base(cfg.inputFile),
 				result.Statistics.BytesGenerated)
 		}
 	}

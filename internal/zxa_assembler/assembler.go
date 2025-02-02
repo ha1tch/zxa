@@ -57,6 +57,7 @@ type InstructionMap map[string]Instruction
 // AssemblerOptions contains configuration for the assembler
 type AssemblerOptions struct {
 	Variant CPUVariant
+	Debug bool
 }
 
 // ForwardRef represents a forward reference to be resolved
@@ -359,7 +360,7 @@ func (a *Assembler) processIncludeFile(filename string) error {
 	}
 
 	// Create a new parser for this file
-	parser := NewParser(string(content))
+	parser := NewParser(string(content), a.options.Debug)
 	parser.assembler = a
 
 	// Process each line
@@ -379,7 +380,8 @@ func (a *Assembler) Assemble(filename string) (AssemblyResult, error) {
 		return AssemblyResult{}, fmt.Errorf("failed to read input file: %v", err)
 	}
 
-	parser := NewParser(string(content))
+
+	parser := NewParser(string(content), a.options.Debug)
 	parser.assembler = a
 
 	// Process each line
