@@ -16,6 +16,11 @@ GOOS=linux   GOARCH=386   go build -x -o ../../bin/zxa.linux32     main.go
 GOOS=darwin  GOARCH=arm64 go build -x -o ../../bin/zxa.mac64.m1    main.go
 GOOS=darwin  GOARCH=amd64 go build -x -o ../../bin/zxa.mac64.intel main.go
 
+# Build for Raspberry Pi
+GOOS=linux   GOARCH=arm   GOARM=6  go build -x -o ../../bin/zxa.rpi.arm6   main.go  # Pi 1, Pi Zero
+GOOS=linux   GOARCH=arm   GOARM=7  go build -x -o ../../bin/zxa.rpi.arm7   main.go  # Pi 2, Pi 3 (32-bit)
+GOOS=linux   GOARCH=arm64          go build -x -o ../../bin/zxa.rpi.arm64  main.go  # Pi 3, Pi 4, Pi 5 (64-bit)
+
 # ---------------------------------------------------------------
 # Important Note on 32-bit macOS (i386) Builds
 # ---------------------------------------------------------------
