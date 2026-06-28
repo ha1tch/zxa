@@ -1,153 +1,23 @@
-# zxa - Z80 cross assembler
+# ⚠️ zxa is superseded by zenas
 
-A simple Z80 cross-assembler for the ZX Spectrum written in Go, featuring a clean syntax and modern development workflow features.
+**zxa is no longer developed. Use [zenas](https://github.com/ha1tch/zenas) instead.**
 
-## Features
+zxa was an early attempt at a Go-based Z80 cross-assembler for the ZX Spectrum. Its successor, **[zenas](https://github.com/ha1tch/zenas)**, is a complete, working assembler that delivers everything zxa set out to do — and is verified against real-world code.
 
-- Aspires to full Z80 instruction set support (possibly incomplete as of Jan 2025)
-- Z80N variant support for the ZX Spectrum Next, N-Go, and clones.
-- Assembler directives (ORG, INCLUDE, INCBIN, etc.)
-- Multiple output formats (binary, hex dump, JSON)
-- Detailed error reporting with source locations
-- Support for labels and constants
-- Include file support for modular code
-- Binary file inclusion support
+## Why zenas
 
-### Missing, may be added:
-- Integration with plus3 (https://github.com/ha1tch/plus3)
-- Integration with zxgotools (https://github.com/ha1tch/zxgotools)
-- Macros
-- Assembler explainer with Ollama
+- **It actually assembles.** zenas builds a full, real-world Z80 operating system kernel **byte-for-byte identically** to the long-established pasmo assembler — every opcode and every symbol address matching exactly. Correctness is the design priority, not an afterthought.
+- **Complete Z80 instruction set.** The entire documented instruction set is covered and continuously verified against a reference assembler, including the undocumented IX/IY half-register operations (IXH/IXL/IYH/IYL) with proper rejection of the illegal combinations. A reproducible coverage checker keeps this honest.
+- **A real toolchain, not a skeleton.** Conditional assembly (`IF`/`IFDEF`/`ELSE`/`ENDIF`) with command-line `--define` build flags, file inclusion with forward references across boundaries, case-sensitive symbols matching the conventions of pasmo and sjasmplus, pasmo-compatible symbol-file output, and symbol arithmetic in operands (`LD HL,base+offset`, `vtable+N*3`).
+- **Same spirit, finished.** Pure Go, zero dependencies, Apache-2.0, clean CLI. The goals zxa described — full Z80 support, directives, multiple output formats, modular includes — are all present and working in zenas.
 
-### Pre-compiled binaries available
-- Windows 32 and 64-bit
-- Linux 32 and 64-bit
-- Mac 64-bit 
-https://github.com/ha1tch/zxa/tree/main/bin
+## Migrating
 
-## Building / Go install
-
-```bash
-$ git clone git@github.com:ha1tch/zxa.git
-$ ./mk.sh
-```
-
-## Quick Start
-
-1. Create an assembly file (example.asm):
-```assembly
-        ORG $8000
-start:  LD A,42
-        LD B,10
-loop:   DJNZ loop
-        RET
-```
-
-2. Assemble the file:
-```bash
-zxa example.asm
-```
-
-3. Check the outputs:
-- example.bin (binary output)
-- example.hex (hex dump if --hex specified)
-- example.json (assembly report if --json specified)
-
-## Usage
+zenas uses conventional, pasmo-style Z80 syntax, so most source written for zxa (or assumed by it) will assemble directly. Point your build at zenas:
 
 ```
-zxa [options] <input.asm>
-
-Options:
-  --next                Enable ZX Spectrum Next's Z80N processor support 
-  -o, --output string   Output file name (default: input base name)
-  -I, --include string  Add include search path
-  --hex                 Generate hex dump output
-  --json                Generate JSON assembly report
-  -v, --verbose         Enable verbose output
-  -q                    Quiet mode (suppress non-error output)
-  --version             Show version information
+zenas assemble yourprogram.asm yourprogram.bin
 ```
 
-## Directives
+See the [zenas README](https://github.com/ha1tch/zenas) for the full directive and option reference.
 
-- `ORG address` - Set the origin address
-- `INCLUDE "file"` - Include source file
-- `INCBIN "file"[,skip[,length]]` - Include binary file
-- `DEFB expressions,...` - Define bytes
-- `DEFW expressions,...` - Define words
-- `DEFS length[,fill]` - Define storage
-- `label: EQU expression` - Define constant
-
-## Error Handling
-
-The assembler provides detailed error messages with categories:
-
-- Syntax errors
-- Symbol errors (undefined, duplicate)
-- Value errors (out of range)
-- File handling errors
-- Directive errors
-- Range errors (jump out of range)
-
-## Library Usage
-
-The assembler can also be used as a Go library:
-
-```go
-package main
-
-import "github.com/ha1tch/zxa/internal/zxa_assembler"
-
-func main() {
-    opts := zxa_assembler.AssemblerOptions{
-        Variant: zxa_assembler.Z80Standard,
-    }
-    
-    instructions, err := zxa_assembler.NewInstructionSet(opts)
-    if err != nil {
-        // Handle error
-    }
-    
-    asm := zxa_assembler.NewAssembler(instructions)
-    asm.SetHexOutput(true)
-    asm.SetJSONOutput(true)
-    
-    result, err := asm.Assemble("program.asm")
-    if err != nil {
-        // Handle error
-    }
-}
-```
-
-## Examples
-
-Check the `examples/` directory for complete example programs:
-
-- `hello/` - Simple hello world program
-- `game/` - Basic game example with sprites
-
-## Testing
-
-Run the test suite:
-
-```bash
-go test ./...
-```
-
-### Contact:
-haitch@duck.com
-https://oldbytes.space/@haitchfive
-
-## License
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
